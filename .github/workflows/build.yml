@@ -60,7 +60,7 @@ jobs:
       # 恢复缓存的旧 digest
       - name: Restore cached digest
         id: cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .cache/frankenphp_digest
           key: frankenphp-digest-${{ steps.fetch.outputs.digest }}
@@ -184,7 +184,7 @@ jobs:
           echo "${{ needs.check-upstream.outputs.new_digest }}" > .cache/frankenphp_digest
 
       - name: Save digest to cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: .cache/frankenphp_digest
           key: frankenphp-digest-${{ needs.check-upstream.outputs.new_digest }}
