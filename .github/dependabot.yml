@@ -5,3 +5,9 @@ updates:
     schedule:
       interval: "weekly"           # 检查频率，可选 daily/weekly/monthly
       day: "sunday"                # 可选：每周日执行（与你的工作流一致）
+    commit-message:
+      prefix: ci                   # 可选：自定义提交消息前缀
+    groups:
+      github-actions:
+        patterns:
+          - "*"                    # 将所有 GitHub Actions 更新合并到一个 PR
