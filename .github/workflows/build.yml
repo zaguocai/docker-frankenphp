@@ -1,0 +1,204 @@
+name: Check & Build FrankenPHP Images
+
+on:
+  schedule:
+    # 每天 UTC 02:00 运行（北京时间 10:00）
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "强制构建（忽略版本检测）"
+        type: boolean
+        default: false
+
+env:
+  DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/frankenphp
+  UPSTREAM_IMAGE: dunglas/frankenphp
+
+jobs:
+  # ─── 1. 检测上游更新 ─────────────────────────────────────────────────
+  check-upstream:
+    name: Check Upstream Image
+    runs-on: ubuntu-latest
+    outputs:
+      updated: ${{ steps.compare.outputs.updated }}
+      new_digest: ${{ steps.fetch.outputs.digest }}
+      frankenphp_version: ${{ steps.fetch.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 获取最新 stable 版本号（从 Docker Hub tags）
+      - name: Get latest stable version
+        id: version
+        run: |
+          LATEST_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/${{ env.UPSTREAM_IMAGE }}/tags?page_size=10&page=1&ordering=last_updated" \
+            | jq -r '.results[].name' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | head -n1)
+
+          if [ -z "$LATEST_VERSION" ]; then
+            echo "Error: Could not find stable version tag"
+            exit 1
+          fi
+          echo "Latest stable version: $LATEST_VERSION"
+          echo "version=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
+
+      # 获取 latest 镜像的 digest（仅用于比较更新）
+      - name: Fetch upstream image digest
+        id: fetch
+        run: |
+          DIGEST=$(docker buildx imagetools inspect ${{ env.UPSTREAM_IMAGE }}:latest \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Upstream digest: ${DIGEST}"
+
+          # 将上面获取的版本号也传递到 outputs
+          echo "version=${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
+
+      # 恢复缓存的旧 digest
+      - name: Restore cached digest
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/frankenphp_digest
+          key: frankenphp-digest-${{ steps.fetch.outputs.digest }}
+          restore-keys: frankenphp-digest-
+
+      # 比较新旧 digest
+      - name: Compare digests
+        id: compare
+        run: |
+          NEW_DIGEST="${{ steps.fetch.outputs.digest }}"
+          FORCE="${{ github.event.inputs.force_build }}"
+
+          if [ -f .cache/frankenphp_digest ]; then
+            OLD_DIGEST=$(cat .cache/frankenphp_digest)
+          else
+            OLD_DIGEST=""
+          fi
+
+          echo "Old digest: ${OLD_DIGEST}"
+          echo "New digest: ${NEW_DIGEST}"
+
+          if [ "$FORCE" = "true" ]; then
+            echo "Force build enabled — skipping digest comparison."
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          elif [ "$NEW_DIGEST" != "$OLD_DIGEST" ]; then
+            echo "Upstream image has been UPDATED."
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No update detected."
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ─── 2. 构建并推送 ─────────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push (${{ matrix.target }})
+    needs: check-upstream
+    if: needs.check-upstream.outputs.updated == 'true'
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - development
+          - production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          VERSION="${{ needs.check-upstream.outputs.frankenphp_version }}"
+          IMAGE="${{ env.DOCKERHUB_IMAGE }}"
+          TARGET="${{ matrix.target }}"
+
+          if [ "$TARGET" = "development" ]; then
+            TAGS="${IMAGE}:development,${IMAGE}:${VERSION}-development"
+          else
+            TAGS="${IMAGE}:latest,${IMAGE}:${VERSION}"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "Computed tags: ${TAGS}"
+
+      - name: Build and push ${{ matrix.target }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            FRANKENPHP_VERSION=${{ needs.check-upstream.outputs.frankenphp_version }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to:   type=gha,scope=${{ matrix.target }},mode=max
+          labels: |
+            org.opencontainers.image.version=${{ needs.check-upstream.outputs.frankenphp_version }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Image build summary
+        run: |
+          echo "### ✅ ${{ matrix.target }} image pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tags | \`${{ steps.tags.outputs.tags }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| FrankenPHP version | \`${{ needs.check-upstream.outputs.frankenphp_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Upstream digest | \`${{ needs.check-upstream.outputs.new_digest }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─── 3. 保存新 digest ───────────────────────────────────────────────
+  save-digest:
+    name: Save New Digest
+    needs: [check-upstream, build-and-push]
+    if: needs.check-upstream.outputs.updated == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Write new digest to cache file
+        run: |
+          mkdir -p .cache
+          echo "${{ needs.check-upstream.outputs.new_digest }}" > .cache/frankenphp_digest
+
+      - name: Save digest to cache
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/frankenphp_digest
+          key: frankenphp-digest-${{ needs.check-upstream.outputs.new_digest }}
+
+  # ─── 4. 无更新摘要 ─────────────────────────────────────────────────
+  skip-summary:
+    name: No Update — Skip Build
+    needs: check-upstream
+    if: needs.check-upstream.outputs.updated == 'false'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print skip reason
+        run: |
+          echo "### ⏭️ 上游镜像无更新，跳过构建" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "当前 digest: \`${{ needs.check-upstream.outputs.new_digest }}\`" >> "$GITHUB_STEP_SUMMARY"

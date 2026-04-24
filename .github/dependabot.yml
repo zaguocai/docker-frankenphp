@@ -1,0 +1,7 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"                 # 工作流文件所在的目录（通常是 /.github/workflows/）
+    schedule:
+      interval: "weekly"           # 检查频率，可选 daily/weekly/monthly
+      day: "sunday"                # 可选：每周日执行（与你的工作流一致）
