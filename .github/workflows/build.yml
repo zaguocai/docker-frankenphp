@@ -29,33 +29,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # 获取最新 stable 版本号（从 Docker Hub tags）
-      - name: Get latest stable version
-        id: version
-        run: |
-          LATEST_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/${{ env.UPSTREAM_IMAGE }}/tags?page_size=10&page=1&ordering=last_updated" \
-            | jq -r '.results[].name' \
-            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
-            | head -n1)
-
-          if [ -z "$LATEST_VERSION" ]; then
-            echo "Error: Could not find stable version tag"
-            exit 1
-          fi
-          echo "Latest stable version: $LATEST_VERSION"
-          echo "version=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
-
-      # 获取 latest 镜像的 digest（仅用于比较更新）
+      # 拉取上游镜像的最新 digest（不下载镜像层，仅获取元数据）
       - name: Fetch upstream image digest
         id: fetch
         run: |
+          # 获取 latest tag 的 digest
           DIGEST=$(docker buildx imagetools inspect ${{ env.UPSTREAM_IMAGE }}:latest \
             --format '{{json .Manifest.Digest}}' | tr -d '"')
+ 
+          # 同时获取具体版本号（从 labels 中读取）
+          VERSION=$(docker buildx imagetools inspect ${{ env.UPSTREAM_IMAGE }}:latest \
+            --format '{{json .Image.Config.Labels}}' \
+            | python3 -c "
+          import json, sys
+          labels = json.load(sys.stdin) or {}
+          # 尝试常见的版本 label
+          ver = labels.get('org.opencontainers.image.version') \
+             or labels.get('version') \
+             or 'latest'
+          print(ver)
+          " 2>/dev/null || echo "latest")
+ 
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "Upstream digest: ${DIGEST}"
-
-          # 将上面获取的版本号也传递到 outputs
-          echo "version=${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}"   >> "$GITHUB_OUTPUT"
+          echo "Upstream digest : ${DIGEST}"
+          echo "Upstream version: ${VERSION}"
 
       # 恢复缓存的旧 digest
       - name: Restore cached digest
