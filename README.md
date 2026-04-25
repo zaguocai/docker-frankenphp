@@ -34,9 +34,9 @@ services:
 | Tag                            | Description                                   |
 | ------------------------------ | --------------------------------------------- |
 | `latest`                       | The Latest of FrankenPHP                      |
-| `development`                  | The Latest of FrankenPHP, development version |
+| `dev`                          | The Latest of FrankenPHP, development version |
 | `1.2.3`                        | Specific release                              |
-| `1.2.3-development`            | Specific release, development version         |
+| `1.2.3-dev`                    | Specific release, development version         |  
 
 ## License
 
