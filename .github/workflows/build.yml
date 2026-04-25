@@ -59,11 +59,12 @@ jobs:
 
           valid_tags.sort(key=version_key, reverse=True)
 
-          print(f'匹配标签列表: {valid_tags}')
+          print(target)
 
           # 查找第一个匹配的
           for tag in valid_tags:
               for img in tag.get('images', []):
+                  print(img.get('digest'))
                   if img.get('digest') == target:
                       print(tag.get('name'))
                       sys.exit(0)
