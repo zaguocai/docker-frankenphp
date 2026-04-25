@@ -3,7 +3,7 @@
 ## Quick start
 
 ```bash
-# Run your existing Laravel project
+# Run a container
 docker run --rm -it \
   -v $(pwd):/app \
   -p 80:80 -p 443:443 -p 443:443/udp \
