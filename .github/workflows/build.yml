@@ -38,16 +38,35 @@ jobs:
             --format '{{json .Manifest.Digest}}' | tr -d '"')
  
           # 同时获取具体版本号（从 labels 中读取）
-          VERSION=$(docker buildx imagetools inspect ${{ env.UPSTREAM_IMAGE }}:latest \
-            --format '{{json .Image.Config.Labels}}' \
+          VERSION=$(curl -sf \
+            "https://hub.docker.com/v2/repositories/${{ env.UPSTREAM_IMAGE }}/tags?page_size=30&ordering=last_updated" \
             | python3 -c "
-          import json, sys
-          labels = json.load(sys.stdin) or {}
-          # 尝试常见的版本 label
-          ver = labels.get('org.opencontainers.image.version') \
-             or labels.get('version') \
-             or 'latest'
-          print(ver)
+          import json, sys, re
+
+          data = json.load(sys.stdin)
+          target = '${DIGEST}'
+
+          # 先按名称降序排序（假设更大的版本号在后面），这样找到的第一个就是最大的
+          # 但 Docker Hub API 返回的 tags 不一定是排序的，所以我们需要自己排序
+          tags = data.get('results', [])
+          # 过滤出符合条件的标签
+          valid_tags = [tag for tag in tags if re.fullmatch(r'^[0-9]+\.[0-9]+\.[0-9]+$', tag.get('name', ''))]
+
+          # 按版本号降序排序
+          def version_key(tag):
+              name = tag.get('name', '')
+              return tuple(map(int, name.split('.')))
+
+          valid_tags.sort(key=version_key, reverse=True)
+
+          # 查找第一个匹配的
+          for tag in valid_tags:
+              for img in tag.get('images', []):
+                  if img.get('digest') == target:
+                      print(tag.get('name'))
+                      sys.exit(0)
+
+          print('latest')
           " 2>/dev/null || echo "latest")
  
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
