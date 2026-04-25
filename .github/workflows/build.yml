@@ -36,7 +36,7 @@ jobs:
           # 获取 latest tag 的 digest
           DIGEST=$(docker buildx imagetools inspect ${{ env.UPSTREAM_IMAGE }}:latest \
             --format '{{json .Manifest.Digest}}' | tr -d '"')
- 
+
           # 同时获取具体版本号（从 labels 中读取）
           VERSION=$(curl -sf \
             "https://hub.docker.com/v2/repositories/${{ env.UPSTREAM_IMAGE }}/tags?page_size=30&ordering=last_updated" \
@@ -59,19 +59,15 @@ jobs:
 
           valid_tags.sort(key=version_key, reverse=True)
 
-          print(type(target))
-
           # 查找第一个匹配的
           for tag in valid_tags:
-              for img in tag.get('images', []):
-                  print(type(img.get('digest')))
-                  if img.get('digest') == target:
-                      print(tag.get('name'))
-                      sys.exit(0)
+              if tag.get('digest') == target:
+                  print(tag.get('name'))
+                  sys.exit(0)
 
           print('latest')
           " 2>/dev/null || echo "latest")
- 
+
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}"   >> "$GITHUB_OUTPUT"
           echo "Upstream digest : ${DIGEST}"
