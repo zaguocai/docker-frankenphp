@@ -59,6 +59,8 @@ jobs:
 
           valid_tags.sort(key=version_key, reverse=True)
 
+          print(f'匹配标签列表: {valid_tags}')
+
           # 查找第一个匹配的
           for tag in valid_tags:
               for img in tag.get('images', []):
