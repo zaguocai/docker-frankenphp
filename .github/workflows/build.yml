@@ -148,7 +148,7 @@ jobs:
           TARGET="${{ matrix.target }}"
 
           if [ "$TARGET" = "development" ]; then
-            TAGS="${IMAGE}:development,${IMAGE}:${VERSION}-development"
+            TAGS="${IMAGE}:dev,${IMAGE}:${VERSION}-dev"
           else
             TAGS="${IMAGE}:latest,${IMAGE}:${VERSION}"
           fi
