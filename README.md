@@ -29,14 +29,18 @@ services:
       - redis
 ```
 
-## tags
+## Tags
 
 | Tag                            | Description                                   |
 | ------------------------------ | --------------------------------------------- |
 | `latest`                       | The Latest of FrankenPHP                      |
 | `dev`                          | The Latest of FrankenPHP, development version |
 | `1.2.3`                        | Specific release                              |
-| `1.2.3-dev`                    | Specific release, development version         |  
+| `1.2.3-dev`                    | Specific release, development version         |
+
+## Extensions
+
+`bcmath` `Core` `ctype` `curl` `date` `dom` `exif` `fileinfo` `filter` `gd` `hash` `iconv` `intl` `json` `lexbor` `libxml` `mbstring` `mysqli` `mysqlnd` `openssl` `pcre` `PDO` `pdo_mysql` `pdo_pgsql` `pdo_sqlite` `Phar` `posix` `random` `readline` `redis` `Reflection` `session` `SimpleXML` `sodium` `SPL` `sqlite3` `standard` `tokenizer` `uri` `xml` `xmlreader` `xmlwriter` `Zend OPcache` `zip` `zlib`
 
 ## License
 
