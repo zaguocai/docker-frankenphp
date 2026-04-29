@@ -39,7 +39,7 @@ jobs:
 
           # 同时获取具体版本号（从 labels 中读取）
           VERSION=$(curl -sf \
-            "https://hub.docker.com/v2/repositories/${{ env.UPSTREAM_IMAGE }}/tags?page_size=30&ordering=last_updated" \
+            "https://hub.docker.com/v2/repositories/${{ env.UPSTREAM_IMAGE }}/tags?page_size=50&ordering=last_updated" \
             | python3 -c "
           import json, sys, re
 
